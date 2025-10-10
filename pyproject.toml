@@ -1,0 +1,36 @@
+#### REDO THIS PROPERLY LATER!!!
+
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "FetoFlow"
+version = "0.1.0"
+description = "Tools for vascular graph modeling"
+authors = [
+    { name="Your Name", email="you@example.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = [
+    "numpy",
+    "scipy",
+    "networkx"
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "mypy"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 150
+
+[project.scripts]
+lint = "FetoFlow.tools:lint"
