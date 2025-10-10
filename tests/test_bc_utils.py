@@ -47,6 +47,28 @@ def test_multiple_inlet_pressures_dict():
 def test_both_inlet_pressure_and_flow_raises():
     with pytest.raises(TypeError):
         generate_boundary_conditions(inlet_pressure=100.0, inlet_flow=1.0, outlet_pressure=0.0)
+
+
+def test_inlet_pressure_dict_invalid_keys_and_values():
+    # invalid key type
+    with pytest.raises(ValueError):
+        generate_boundary_conditions(inlet_pressure={0: 100.0}, outlet_pressure=0.0)
+    with pytest.raises(ValueError):
+        generate_boundary_conditions(inlet_pressure={1: -10.0}, outlet_pressure=0.0)
+
+
+def test_inlet_flow_dict_multiple():
+    bcs = generate_boundary_conditions(inlet_flow={1: 2.5, 2: 1.5}, outlet_pressure=0.0)
+    assert "inlet" in bcs and "flow" in bcs["inlet"]
+    flows = bcs["inlet"]["flow"]
+    assert 0 in flows and 1 in flows
+
+
+def test_outlet_pressure_invalid_type_and_value():
+    with pytest.raises(TypeError):
+        generate_boundary_conditions(inlet_pressure=100.0, outlet_pressure="bad")
+    with pytest.raises(ValueError):
+        generate_boundary_conditions(inlet_pressure=100.0, outlet_pressure=-1)
 # example function name - get GPT to write these later.
 
 # Cover all possible edge cases - 1 test case per edge case.

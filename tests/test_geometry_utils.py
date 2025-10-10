@@ -43,3 +43,31 @@ def test_create_anastomosis_errors_and_success(simple_two_node_graph):
     with pytest.raises(KeyError):
         create_anastomosis(G, node_from=1, node_to=2, radius=0.5)
 
+
+def test_create_geometry_basic_and_venous_mesh():
+    # Build a small tree: node 0 -> 1 -> 2 and 1 -> 3 (bifurcation)
+    nodes = {0: [0.0, 0.0, 0.0], 1: [1.0, 0.0, 0.0], 2: [2.0, 0.1, 0.0], 3: [2.0, -0.1, 0.0]}
+    elements = [(0, 1), (1, 2), (1, 3)]
+    G = create_geometry(nodes, elements, inlet_radius=0.001, strahler_ratio_arteries=0.8, arteries_only=False, outlet_vein_radius=0.0005, strahler_ratio_veins=0.9)
+    # Basic checks
+    assert G.number_of_nodes() > 0
+    assert G.number_of_edges() >= len(elements)
+    # terminal nodes should have capillary_equivalent outgoing to venous mesh
+    terminal_nodes = [n for n, d in G.out_degree() if d == 1 and any(G[n][v]["vessel_type"] == "capillary_equivalent" for _, v in G.out_edges(n))]
+    # should be at least one terminal arterial node
+    assert len(terminal_nodes) >= 1
+
+
+def test_update_strahlers_complex():
+    import networkx as nx
+    G = nx.DiGraph()
+    # chain 0->1->2, and 1->3
+    for nid in range(4):
+        G.add_node(nid)
+    G.add_edge(0,1,strahler=None)
+    G.add_edge(1,2,strahler=None)
+    G.add_edge(1,3,strahler=None)
+    G = update_strahlers(G, 0, 1)
+    # The upstream edge (0,1) should have strahler 2 because its two children have equal strahler 1
+    assert G[0][1]["strahler"] == 2
+
