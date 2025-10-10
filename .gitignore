@@ -1,1 +1,10 @@
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+*.eggs/
+dist/
+build/
+*.manifest
+*.spec
 
