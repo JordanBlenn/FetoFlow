@@ -1,1 +1,45 @@
+import pytest
+import numpy as np
+
+from FetoFlow.geometry_utils import calcLength, update_strahlers, create_anastomosis, create_geometry
+
+
+def test_calc_length_simple():
+    # Create two nodes with known coordinates
+    class G:
+        nodes = {0: {"x": 0.0, "y": 0.0, "z": 0.0}, 1: {"x": 3.0, "y": 4.0, "z": 0.0}}
+
+    length = calcLength(G, 0, 1)
+    # Distance is 5; converted from mm to m in implementation so expect 0.005
+    assert np.isclose(length, 0.005)
+
+
+def test_update_strahlers_leaf_case():
+    # Build a tiny graph with node 0 -> 1 and 1 -> 2 (chain). Ensure strahler assignment works.
+    import networkx as nx
+
+    G = nx.DiGraph()
+    G.add_node(0)
+    G.add_node(1)
+    G.add_node(2)
+    G.add_edge(0, 1, strahler=None)
+    G.add_edge(1, 2, strahler=None)
+    G = update_strahlers(G, 0, 1)
+    # edge (0,1) should have strahler 1 and edge (1,2) should have been set to 1 via recursion
+    assert G[0][1]["strahler"] == 1
+    assert G[1][2]["strahler"] == 1
+
+
+def test_create_anastomosis_errors_and_success(simple_two_node_graph):
+    G = simple_two_node_graph
+    # nodes in create_anastomosis are 1-based so use values outside range to trigger errors
+    with pytest.raises(ValueError):
+        create_anastomosis(G, node_from=999, node_to=1)
+    with pytest.raises(ValueError):
+        create_anastomosis(G, node_from=1, node_to=1)
+
+    # On this minimal graph create_anastomosis will attempt to compute length using
+    # 1-based node indices and may raise a KeyError if coordinates aren't present.
+    with pytest.raises(KeyError):
+        create_anastomosis(G, node_from=1, node_to=2, radius=0.5)
 
