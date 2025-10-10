@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>file_parsing_utils &#8212; FetoFlow 2025 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=12dfc556" />
+    <script src="_static/documentation_options.js?v=cb975c41"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="geometry_utils" href="geometry_utils.html" />
+    <link rel="prev" title="bc_utils" href="bc_utils.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="file-parsing-utils">
+<h1>file_parsing_utils<a class="headerlink" href="#file-parsing-utils" title="Link to this heading">¶</a></h1>
+<p>Utilities for reading the simple ipnode/ipelem/ipfiel file formats used by
+the project. The functions here are intentionally small and strict — they
+perform basic validation of file names and convert the 1-based indexing of
+the input files to the 0-based indexing used internally.</p>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">¶</a></h2>
+<dl>
+<dt>read_nodes(filename)</dt><dd><p>Parse a <code class="docutils literal notranslate"><span class="pre">.ipnode</span></code> file and return a dictionary mapping node ids (0-based)
+to their (x, y, z) coordinates. Performs basic filename validation and
+converts coordinates to floats.
+Parameters
+———-
+filename : str</p>
+<blockquote>
+<div><p>Path to a <code class="docutils literal notranslate"><span class="pre">.ipnode</span></code> file. The function validates the extension
+and expects the format used by the project’s mesh exporter.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>dict</dt><dd><p>Mapping <code class="docutils literal notranslate"><span class="pre">node_index</span> <span class="pre">-&gt;</span> <span class="pre">[x,</span> <span class="pre">y,</span> <span class="pre">z]</span></code> with 0-based node indices.</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">nodes</span> <span class="o">=</span> <span class="n">read_nodes</span><span class="p">(</span><span class="s1">&#39;placenta.ipnode&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd>
+<dt>read_elements(filename)</dt><dd><p>Parse a <code class="docutils literal notranslate"><span class="pre">.ipelem</span></code> file and return a list of element tuples
+(node_from, node_to) using 0-based node indices.</p>
+<dl class="simple">
+<dt>filename<span class="classifier">str</span></dt><dd><p>Path to a <code class="docutils literal notranslate"><span class="pre">.ipelem</span></code> file.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>list of tuple</dt><dd><p>Each element is <code class="docutils literal notranslate"><span class="pre">(node_from_index,</span> <span class="pre">node_to_index)</span></code> with 0-based
+indices.</p>
+</dd>
+</dl>
+</dd>
+<dt>define_fields_from_files(files)</dt><dd><p>Read one or more <code class="docutils literal notranslate"><span class="pre">.ipfiel</span></code> files that encode per-element/per-node
+fields (for example a radius or resistance field). The input is a
+dictionary mapping field names to filenames and the return value is a
+dict mapping field names to dictionaries of element indices -&gt; values.</p>
+<dl class="simple">
+<dt>files<span class="classifier">dict</span></dt><dd><p>Dictionary mapping field names (<code class="docutils literal notranslate"><span class="pre">str</span></code>) to filenames (<code class="docutils literal notranslate"><span class="pre">str</span></code>)
+of corresponding <code class="docutils literal notranslate"><span class="pre">.ipfiel</span></code> files.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>dict</dt><dd><p>Mapping field name to a dict of element indices -&gt; numeric value.</p>
+</dd>
+</dl>
+<p>The function performs minimal validation of the ipfiel format and
+will raise <code class="xref py py-class docutils literal notranslate"><span class="pre">TypeError</span></code> for unexpected extensions.</p>
+</dd>
+</dl>
+</section>
+<section id="notes-and-limitations">
+<h2>Notes and limitations<a class="headerlink" href="#notes-and-limitations" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>The parser expects the original simple text formats used in the
+project. If you need to support other mesh/file formats consider
+converting them upstream or adding another helper.</p></li>
+<li><p>The functions validate file extensions and will raise <code class="xref py py-class docutils literal notranslate"><span class="pre">TypeError</span></code>
+for unexpected extensions.</p></li>
+</ul>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">nodes</span> <span class="o">=</span> <span class="n">read_nodes</span><span class="p">(</span><span class="s1">&#39;placenta.ipnode&#39;</span><span class="p">)</span>
+<span class="n">elements</span> <span class="o">=</span> <span class="n">read_elements</span><span class="p">(</span><span class="s1">&#39;placenta.ipelem&#39;</span><span class="p">)</span>
+<span class="n">fields</span> <span class="o">=</span> <span class="n">define_fields_from_files</span><span class="p">({</span><span class="s1">&#39;radius&#39;</span><span class="p">:</span><span class="s1">&#39;radius.ipfiel&#39;</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
+<section id="api-reference">
+<h2>API reference<a class="headerlink" href="#api-reference" title="Link to this heading">¶</a></h2>
+<dl>
+<dt>read_nodes</dt><dd><dl class="simple">
+<dt>filename<span class="classifier">str</span></dt><dd><p>Path to a <code class="docutils literal notranslate"><span class="pre">.ipnode</span></code> file. The function validates the extension
+and expects the format used by the project’s mesh exporter.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>dict</dt><dd><p>Mapping <code class="docutils literal notranslate"><span class="pre">node_index</span> <span class="pre">-&gt;</span> <span class="pre">[x,</span> <span class="pre">y,</span> <span class="pre">z]</span></code> with 0-based node indices.</p>
+</dd>
+</dl>
+</dd>
+<dt>read_elements</dt><dd><dl class="simple">
+<dt>filename<span class="classifier">str</span></dt><dd><p>Path to a <code class="docutils literal notranslate"><span class="pre">.ipelem</span></code> file. The function validates the extension
+and returns a list of tuples describing element connectivity.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>list of tuple</dt><dd><p>Each element is <code class="docutils literal notranslate"><span class="pre">(node_from_index,</span> <span class="pre">node_to_index)</span></code> with 0-based
+indices.</p>
+</dd>
+</dl>
+</dd>
+<dt>define_fields_from_files</dt><dd><dl class="simple">
+<dt>files<span class="classifier">dict</span></dt><dd><p>Dictionary mapping field names (<code class="docutils literal notranslate"><span class="pre">str</span></code>) to filenames (<code class="docutils literal notranslate"><span class="pre">str</span></code>)
+of corresponding <code class="docutils literal notranslate"><span class="pre">.ipfiel</span></code> files.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>dict</dt><dd><p>Mapping field name to a dict of element indices -&gt; numeric value.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="notes">
+<h2>Notes<a class="headerlink" href="#notes" title="Link to this heading">¶</a></h2>
+<p>These functions are intentionally strict; if you need to import other
+mesh formats create a lightweight converter that outputs the simple
+<code class="docutils literal notranslate"><span class="pre">.ipnode</span></code>/<code class="docutils literal notranslate"><span class="pre">.ipelem</span></code> format and call the helpers here. See
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">FetoFlow.geometry_utils</span></code> for how parsed nodes/elements are used to
+construct the graph.</p>
+</section>
+<section id="id1">
+<h2>Examples<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">nodes</span> <span class="o">=</span> <span class="n">read_nodes</span><span class="p">(</span><span class="s1">&#39;input/placenta.ipnode&#39;</span><span class="p">)</span>
+<span class="n">elements</span> <span class="o">=</span> <span class="n">read_elements</span><span class="p">(</span><span class="s1">&#39;input/placenta.ipelem&#39;</span><span class="p">)</span>
+<span class="n">fields</span> <span class="o">=</span> <span class="n">define_fields_from_files</span><span class="p">({</span><span class="s1">&#39;radius&#39;</span><span class="p">:</span><span class="s1">&#39;input/radius.ipfiel&#39;</span><span class="p">})</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">FetoFlow</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Modules:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="FetoFlow.html">FetoFlow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bc_utils.html">bc_utils</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">file_parsing_utils</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#functions">Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes-and-limitations">Notes and limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#api-reference">API reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#id1">Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="geometry_utils.html">geometry_utils</a></li>
+<li class="toctree-l1"><a class="reference internal" href="helper_functions.html">helper_functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="matrix_builder.html">matrix_builder</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pressure_flow_utils.html">pressure_flow_utils</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resistance_utils.html">resistance_utils</a></li>
+<li class="toctree-l1"><a class="reference internal" href="solve_utils.html">solve_utils</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="bc_utils.html" title="previous chapter">bc_utils</a></li>
+      <li>Next: <a href="geometry_utils.html" title="next chapter">geometry_utils</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Jude Beullens and Jordan Blennerhassett.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+      |
+      <a href="_sources/file_parsing_utils.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

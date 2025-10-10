@@ -7,14 +7,21 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'FetoFlow'
-copyright = '2025, Jordan and Jude'
-author = 'Jordan and Jude'
-release = '0.1.0'
+copyright = '2025, Jude Beullens and Jordan Blennerhassett'
+author = 'Jude Beullens and Jordan Blennerhassett'
+release = '2025'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['sphinx.ext.mathjax']  # for HTML
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.napoleon", 
+    "sphinx.ext.viewcode"
+]
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
