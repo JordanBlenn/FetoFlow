@@ -1,9 +1,18 @@
-name: Build and Deploy Docs
+name: docs
 
 on:
   push:
-    branches:
-      - main  # or 'master' if that's your default branch
+    branches: [ main ]   # or your default branch
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -18,15 +27,27 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install -U pip
           pip install sphinx sphinx-rtd-theme sphinx-autobuild
 
-      - name: Build documentation
+      - name: Build Sphinx
         run: |
           cd documentation
           make html
+          # ensure Pages doesn't run Jekyll on your static site
+          touch _build/html/.nojekyll
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./documentation/_build/html
+          path: documentation/_build/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
