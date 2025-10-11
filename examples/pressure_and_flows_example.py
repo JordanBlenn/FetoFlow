@@ -1,0 +1,46 @@
+from fetoflow.pressure_flow_utils import pressures_and_flows
+import pandas as pd
+def main():
+
+    node_filename = "FullTree.ipnode"
+    element_filename = "FullTree.ipelem"
+    boundary_conditions = {
+        "inlet" : {
+            "pressure" : 6650
+        },
+        "outlet" : {
+            "pressure" : 2660
+        }
+    }
+    inlet_radius = 1.8*10**-3
+    strahler_ratio_arteries = 1.38
+    
+    # call pressure and flows function
+    G = pressures_and_flows(
+        node_filename,
+        element_filename,
+        boundary_conditions,
+        inlet_radius,
+        strahler_ratio_arteries,
+        input_directory=".",
+        output_directory="./output_data",
+        flow_output_filename="flow_values.csv",
+        pressure_output_filename="flow_values.csv",
+        arteries_only=False,
+        viscosity_model="constant",
+        vessel_type="rigid",
+        outlet_vein_radius=None,
+        strahler_ratio_veins=None,
+        anastomosis=None,
+        mu=0.33600e-2,  # This is the non-capillary viscosity value used
+        capillary_model="analytical2015",
+        capillary_parameters=None,  # TODO: Ensure proper dict formatting here.
+        radius_filename=None,
+        other_field_filenames=None,  # TODO: these are implementable. and radius. Dictionary if used
+        verbose=False,
+        time_statistics=False,
+        return_graph=False,
+    )
+
+if __name__ == '__main__':
+    main()
