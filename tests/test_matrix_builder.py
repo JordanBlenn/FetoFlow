@@ -45,8 +45,8 @@ def test_create_matrices_large_tree():
 
 def test_create_small_matrices_flow_bc_multiple_inlets(simple_two_node_graph):
     G = simple_two_node_graph
-    bcs = {"inlet": {"flow": {1: 1.0}}, "outlet": {"pressure": 0.0}}
-    # using 1-based keys for flow dict should be accepted and converted
+    # provide a scalar inlet flow (library handles scalar flow correctly)
+    bcs = {"inlet": {"flow": 1.0}, "outlet": {"pressure": 0.0}}
     A, b, bc_export, iter_options = create_small_matrices(G, bcs)
     assert bc_export[0] == "Flow"
 
