@@ -1,0 +1,32 @@
+name: Build and Deploy Docs
+
+on:
+  push:
+    branches:
+      - main  # or 'master' if that's your default branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install sphinx sphinx-rtd-theme sphinx-autobuild
+
+      - name: Build documentation
+        run: |
+          cd documentation
+          make html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./documentation/_build/html
