@@ -29,7 +29,7 @@ def pressures_and_flows(
     input_directory=".",
     output_directory="./output_data",
     flow_output_filename="flow_values.csv",
-    pressure_output_filename="flow_values.csv",
+    pressure_output_filename="pressure_values.csv",
     arteries_only=False,
     viscosity_model="constant",
     vessel_type="rigid",
