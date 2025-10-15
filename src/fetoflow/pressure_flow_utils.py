@@ -10,11 +10,6 @@ from .resistance_utils import calculate_resistance
 from .matrix_builder import create_matrices,create_small_matrices
 from .solve_utils import solve_system,solve_small_system, solve_iterative_system, iterative_solve_small
 
-import pandas as pd
-import re
-import matplotlib.pyplot as plt
-import seaborn as sns
-from scipy.sparse.linalg import svds
 import os
 os.getcwd()
 
