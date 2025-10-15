@@ -7,4 +7,11 @@ dist/
 *build/
 *.manifest
 *.spec
-
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+*.ipynb_checkpoints
+*.log
