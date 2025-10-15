@@ -79,35 +79,58 @@ def __solve_with_gmres(A, b, G,boundary_conditions,current_p=None):
     return pressures, flows,internal_p,flag
 
     
-def update_small_matrix(G,Br,iter_options,flows,pressures):
+def update_small_matrix(G,diag_to_update,flows,iter_options):
     # depending on diverging/converging use associated edges to compute pressure drop coefficients for the current bifurcation/edge combo.
     # could look at only computing some of these once for efficiency, but i think since the flows need to be recalculated and updated anyway not worth
     t = time.time()
     if iter_options["branch_nodes"]:
+        viscous_re_threshold = 100 # scale when Re < 100 -> otherwise the Mynard approx is not rly valid for low Re
+        absolute_re_threshold = 300 # reynolds number should be at most 300 (based on umbilical artery/vein)
         rho = 1060 # blood density
+        mu = 4e-3 # visc
         branching_dict = iter_options["branch_nodes"]
         for row in branching_dict.keys():
-            # ignore anastomoses due to negative flow?
-            entering_nodes,leaving_nodes,leaving_edges,original_row = branching_dict[row]
+            # get required info
+            entering_nodes,leaving_nodes,original_row = branching_dict[row]
             if len(leaving_nodes) > 1:
                 datum_flow,datum_area = flows[G[entering_nodes[0]][original_row]["edge_id"]],np.pi*G[entering_nodes[0]][original_row]["radius"]**2
-                for i,j in enumerate(leaving_nodes):
+                max_flow = absolute_re_threshold*datum_area*mu/(rho*2*np.pi*G[entering_nodes[0]][original_row]["radius"])
+                datum_flow = np.clip(datum_flow,1e-14,max_flow)
+                for j in leaving_nodes:
                     flow_j,area_j = flows[G[original_row][j]["edge_id"]],np.pi*G[original_row][j]["radius"]**2
+                    max_flow = absolute_re_threshold*area_j*mu/(rho*2*np.pi*G[original_row][j]["radius"])
+                    flow_j = np.clip(flow_j,1e-14,max_flow)
+
                     coef = 1 - 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[original_row][j]["bifurcation_angle"])))
-                    p_loss = max(coef*1/2*rho*(datum_flow/datum_area)**2,0)
-                    Br[row,leaving_edges[i]] = -(1 - p_loss/pressures[row])
-                
+                    p_loss = coef*rho*(flow_j/area_j)**2 + 1/2*rho*((datum_flow/datum_area)**2 - (flow_j/area_j)**2) # full pressure loss as per Mynard
+
+                    Re = rho * (flow_j/area_j)* 2* G[original_row][j]["radius"]/mu
+                    if Re < viscous_re_threshold:
+                        p_loss*= Re/viscous_re_threshold
+
+                    effective_res = p_loss/flow_j
+                    diag_to_update[G[original_row][j]["edge_id"]] = 1/(1/diag_to_update[G[original_row][j]["edge_id"]] + effective_res)
+
             elif len(entering_nodes) > 1:
                 datum_flow,datum_area = flows[G[original_row][leaving_nodes[0]]["edge_id"]],np.pi*G[original_row][leaving_nodes[0]]["radius"]**2
-                coef = 1
+                max_flow = absolute_re_threshold*datum_area*mu/(rho*2*np.pi*G[entering_nodes[0]][original_row]["radius"])
+                datum_flow = np.clip(datum_flow,1e-14,max_flow)
                 p_loss = 0
                 for j in entering_nodes:
                     flow_j,area_j = flows[G[j][original_row]["edge_id"]],np.pi*G[j][original_row]["radius"]**2
-                    coef -= 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[j][original_row]["bifurcation_angle"])))
-                    p_loss += max(coef*1/2*rho*(datum_flow/datum_area)**2/pressures[row],0)
-                    Br[row,leaving_edges[0]] = -(1 - p_loss)
+                    max_flow = absolute_re_threshold*area_j*mu/(rho*2*np.pi*G[j][original_row]["radius"])
+                    flow_j = np.clip(flow_j,1e-14,max_flow)
+                    coef = 1 - 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[j][original_row]["bifurcation_angle"])))
+                    p_loss += coef*rho*(flow_j/area_j)**2 + 1/2*rho*((datum_flow/datum_area)**2 - (flow_j/area_j)**2)
+                if Re < viscous_re_threshold:
+                    p_loss*= Re/viscous_re_threshold
+                effective_res = p_loss/datum_flow
+                diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]] = 1/(1/diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]] + effective_res)
+
     print(f"matrix update: {time.time() - t}")
-    return Br
+    return diag_to_update
+
+
 
 
 def solve_system(A, b, num_nodes, num_edges):
@@ -119,7 +142,7 @@ def solve_system(A, b, num_nodes, num_edges):
 
 def iterative_solve_small(A,b,G,bc_export,tol,info,alpha=1,maxiter=20,use_gmres=False,adaptive_stepping=True):
     s = time.time()
-    update_matrix = info["branching_update_matrix"]
+    W = info["branching_update_matrix"]
     if use_gmres:
         p,q,internal_p = solve_small_system(A,b,G,bc_export,ill_conditioned=True)
     else:
@@ -132,24 +155,24 @@ def iterative_solve_small(A,b,G,bc_export,tol,info,alpha=1,maxiter=20,use_gmres=
     old_mse = np.inf
     iteration = 1
     print("Warm up period...")
-    min_alpha = min(tol/10,1)
+    min_alpha = min(5*tol,1)
     max_alpha = 1
     flag = int(use_gmres)
     init_alpha = alpha
     if len(info["branching_calc_matrices"]) == 1:
-        Wbt = info["branching_calc_matrices"][0]
+        Br = info["branching_calc_matrices"][0]
     else:
-        [Wbt,u_ainv_c] = info["branching_calc_matrices"]
+        [Br,u_ainv_c] = info["branching_calc_matrices"]
     while p_mse > tol or flag:
         if iteration > maxiter:
             print("Maximum Iteration Count Reached. Consider constraining the learning rate parameter alpha (if observing cycling) or GMRES if MSE is very large")
             break
-        Br_new = update_small_matrix(G,update_matrix,info,q,p)
+        diag_update = update_small_matrix(G,W.diagonal(),q,info)
+        W_new = sps.diags(diag_update,offsets=0).tocsc()
         if len(info["branching_calc_matrices"]) == 1:
-            A_new = Br_new @ Wbt
+            A_new = Br @ W_new @ Br.T
         else:
-            print("flow bc")
-            A_new = Br_new @ Wbt - u_ainv_c
+            A_new = Br @ W_new @ Br.T - u_ainv_c
         if use_gmres:
             p,q,internal_p,flag = __solve_with_gmres(A_new,b,G,bc_export,current_p=internal_p)
         else:
@@ -174,7 +197,6 @@ def iterative_solve_small(A,b,G,bc_export,tol,info,alpha=1,maxiter=20,use_gmres=
         p_infnorm, q_infnorm = np.max(np.abs(p_diff)),np.max(np.abs(q_diff))
         p0 = p1
         q0 = q1
-        update_matrix = Br_new # update Br with new flows
         print(f"Info |  Max Pressure: {np.max(p0)} | Min Pressure: {np.min(p0)} | Max flow: {np.max(q0)} | Min flow: {np.min(q0)}")
         print(f"Iteration: {iteration} | Pressure MSE:  {round(p_mse,4)} | Flow MSE: {q_mse}, | alpha : {alpha} | Max diff pressure: {p_infnorm} | Max diff flow: {q_infnorm}")
         if iteration == maxiter//10: 

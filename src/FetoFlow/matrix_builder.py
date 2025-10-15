@@ -139,10 +139,9 @@ def create_small_matrices(G, bcs,branching_angles=False,non_linear_rheology=Fals
             iter_options["branch_nodes"] = {}
             for new_row,current_row in enumerate(rest):
                 if B[current_row,:].nnz > 2: # otherwise no branching angle effect
-                    __,leaving_edges,__ = sp.find(B[current_row,:] == -1)
                     leaving_nodes = [n[1] for n in G.out_edges(current_row)]  
                     entering_nodes = [n[0] for n in G.in_edges(current_row)]
-                    iter_options["branch_nodes"][new_row] = (entering_nodes,leaving_nodes,leaving_edges,current_row) # new row will be the associated index in the r x r matrix A
+                    iter_options["branch_nodes"][new_row] = (entering_nodes,leaving_nodes,current_row) # new row will be the associated index in the r x r matrix A
         else:
             iter_options = None
 
@@ -191,18 +190,18 @@ def create_small_matrices(G, bcs,branching_angles=False,non_linear_rheology=Fals
             b = b.tocsc() # more efficient for sparse multiplication
 
             bc_export = ("Flow",np.array(boundary_indices),np.array(boundary_vals),inlet_idx)
-            branching_angles_matrices = [WBt[:,rest],u_ainv_c]
+            branching_angles_matrices = [Br,u_ainv_c]
         else:
             # Pressure BCs
             Br = B[rest,:]
             A = Br @ WBt[:,rest]
             b = -Br @ WBt[:,boundary_indices] @ boundary_vals
             bc_export = ("Pressure",np.array(boundary_indices),np.array(boundary_vals),None)
-            branching_angles_matrices = [WBt[:,rest]]
+            branching_angles_matrices = [Br]
 
         # A = A.tocsc()
         if branching_angles:
             iter_options["branching_calc_matrices"] = branching_angles_matrices
-            iter_options["branching_update_matrix"] = Br
+            iter_options["branching_update_matrix"] = W
         return A, b, bc_export, iter_options
 
