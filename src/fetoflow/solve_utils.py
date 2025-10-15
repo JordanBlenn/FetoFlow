@@ -1,12 +1,11 @@
 import scipy.sparse as sps
 import numpy as np
 import time
-import matplotlib.pyplot as plt
-from scipy.special import logit, expit
+from scipy.special import expit
 
-from reprosimV2.matrix_builder import create_matrices
-from reprosimV2.resistance_utils import calculate_resistance, calculate_viscosity_factor_from_radius
-from reprosimV2.geometry_utils import update_geometry_with_pressures_and_flows
+from .matrix_builder import create_matrices
+from .resistance_utils import calculate_resistance, calculate_viscosity_factor_from_radius
+from .geometry_utils import update_geometry_with_pressures_and_flows
 
 def solve_small_system(A, b, G,boundary_conditions,ill_conditioned=False,p0=None,current_p=None,max_iterations=None,restart=None):
     bc_type,boundary_indices,boundary_vals,inlet_idx = boundary_conditions
