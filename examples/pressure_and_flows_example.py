@@ -1,4 +1,4 @@
-from fetoflow.pressure_flow_utils import pressures_and_flows
+from FetoFlow.pressure_flow_utils import pressures_and_flows
 import pandas as pd
 def main():
 

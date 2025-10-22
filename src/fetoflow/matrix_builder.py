@@ -203,5 +203,6 @@ def create_small_matrices(G, bcs,branching_angles=False,non_linear_rheology=Fals
         if branching_angles:
             iter_options["branching_calc_matrices"] = branching_angles_matrices
             iter_options["branching_update_matrix"] = W
-        return A, b, bc_export, iter_options
+            return A, b, bc_export, iter_options
+        return A,b,bc_export
 

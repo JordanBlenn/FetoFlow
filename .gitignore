@@ -15,3 +15,4 @@ dist/
 Thumbs.db
 *.ipynb_checkpoints
 *.log
+testing_scripts/
