@@ -7,39 +7,125 @@ from .matrix_builder import create_matrices
 from .resistance_utils import calculate_resistance, calculate_viscosity_factor_from_radius
 from .geometry_utils import update_geometry_with_pressures_and_flows
 
-def solve_small_system(A, b, G,boundary_conditions,ill_conditioned=False,p0=None,current_p=None,max_iterations=None,restart=None):
-    bc_type,boundary_indices,boundary_vals,inlet_idx = boundary_conditions
+def solve_small_system(A, b, G, boundary_conditions, ill_conditioned=False):
+    """Solve a reduced system of equations for internal pressures and flows.
 
-    p = sps.linalg.spsolve(A,b) # This solves for internal pressures!
+    This function solves the reduced system obtained after eliminating known boundary 
+    values. For flow boundary conditions, it reconstructs inlet pressures from the
+    solution.
+
+    Parameters
+    ----------
+    A : scipy.sparse.csr_matrix
+        Reduced system matrix after boundary elimination
+    b : numpy.ndarray
+        Right-hand side vector after boundary elimination
+    G : networkx.DiGraph
+        Graph containing network topology and edge properties
+    boundary_conditions : tuple
+        (bc_type, boundary_indices, boundary_vals, inlet_idx) describing boundary
+        conditions and indices
+    ill_conditioned : bool, optional
+        If True, return internal pressures for iterative refinement
+    p0 : numpy.ndarray, optional
+        Initial pressure guess for iterative methods
+    current_p : numpy.ndarray, optional 
+        Current pressure solution for warm starts
+    max_iterations : int, optional
+        Maximum iterations for iterative solver
+    restart : int, optional
+        GMRES restart parameter
+
+    Returns
+    -------
+    dict
+        Mapping of node indices to pressures
+    dict
+        Mapping of edge indices to flows
+    numpy.ndarray, optional
+        Internal pressure solution if ill_conditioned=True
+    """
+    # Unpack boundary conditions tuple
+    bc_type, boundary_indices, boundary_vals, inlet_idx = boundary_conditions
+
+    # Direct solve of reduced system Ap = b for internal pressures
+    p = sps.linalg.spsolve(A, b)  
+    
+    # Save internal pressures if needed for iterative refinement
     if ill_conditioned:
         internal_p = p.copy()
+    
+    # Initialize flow array for all edges
     q = np.zeros(shape=G.number_of_edges())
+
+    # For flow BCs, reconstruct inlet pressures using p = QR + p_downstream
     if bc_type == "Flow":
-        boundary_vals_current_iteration = boundary_vals.copy() # otherwise blowup!  
+        boundary_vals_current_iteration = boundary_vals.copy()  # Make copy to avoid modifying original
         for current_inlet in inlet_idx:
+            # Get downstream node and flow value
             adj_to_inlet = list(G.out_edges(current_inlet))[0][1]
             value_idx = np.where(boundary_indices == current_inlet)[0][0]
+            # Account for removed inlet nodes in index mapping
             index_adjustment = np.sum([adj_to_inlet > i for i in inlet_idx])
+            # Reconstruct inlet pressure: p_inlet = Q*R + p_downstream
             p0 = boundary_vals[value_idx]*G[current_inlet][adj_to_inlet]["resistance"] + p[adj_to_inlet - index_adjustment]
             boundary_vals_current_iteration[value_idx] = p0 
     else:
+        # For pressure BCs, use given boundary values directly
         boundary_vals_current_iteration = boundary_vals
+
+    # Insert boundary values back into pressure vector in correct order
     indices = np.argsort(boundary_indices)
     for idx,val in zip(boundary_indices[indices],boundary_vals_current_iteration[indices]):
         p = np.insert(p,idx,val)
+    # Calculate flows using Q = (p1-p2)/R for each edge
     for u,v in G.edges():
-        pu,pv = p[u],p[v]
-        q[G[u][v]['edge_id']] = (pu-pv)/G[u][v]['resistance']
+        pu,pv = p[u],p[v]  # Get pressures at each end
+        q[G[u][v]['edge_id']] = (pu-pv)/G[u][v]['resistance']  # Flow from pressure difference
+
+    # Pack results into dictionaries with node/edge indices as keys
     num_nodes = G.number_of_nodes()
     num_edges = G.number_of_edges()
     pressures = {node_id: p[node_id] for node_id in range(num_nodes)}
-    flows = {edge_id: q[edge_id] for edge_id in range(num_edges)} #TODO: triple check these but they should be fine
-    if ill_conditioned:
-        return pressures,flows,internal_p
-    return pressures, flows
+    flows = {edge_id: q[edge_id] for edge_id in range(num_edges)}
 
-def __solve_with_gmres(A, b, G,boundary_conditions,current_p=None):
-    bc_type,boundary_indices,boundary_vals,inlet_idx = boundary_conditions
+    # Return appropriate results based on ill_conditioned flag
+    if ill_conditioned:
+        return pressures, flows, internal_p  # Include internal pressures for refinement
+    return pressures, flows  # Standard return of results
+
+def __solve_with_gmres(A, b, G, boundary_conditions, current_p=None):
+    """Solve system using GMRES with ILU preconditioning.
+    
+    Internal helper that implements GMRES solution with incomplete LU 
+    preconditioning for ill-conditioned systems. Uses scipy.sparse.linalg.gmres
+    with an ILU preconditioner.
+
+    Parameters
+    ----------
+    A : scipy.sparse.csr_matrix
+        System matrix 
+    b : numpy.ndarray
+        Right-hand side vector
+    G : networkx.DiGraph
+        Graph containing network topology
+    boundary_conditions : tuple
+        (bc_type, boundary_indices, boundary_vals, inlet_idx)
+    current_p : numpy.ndarray, optional
+        Initial guess for GMRES
+
+    Returns
+    -------
+    dict
+        Node pressures
+    dict 
+        Edge flows
+    numpy.ndarray
+        Internal pressure solution
+    int
+        GMRES convergence flag (0 = success)
+    """
+    bc_type, boundary_indices, boundary_vals, inlet_idx = boundary_conditions
     # incomplete lu conditioner as per Al-Kurdi/Kincaid 
     n = A.shape[0]
     A_inv = sps.linalg.spilu(A=A,drop_tol=np.min(A.diagonal()),fill_factor=15) # approximates A inverse using an incomplete LU factorisation
@@ -79,26 +165,70 @@ def __solve_with_gmres(A, b, G,boundary_conditions,current_p=None):
     return pressures, flows,internal_p,flag
 
     
-def update_small_matrix(G,diag_to_update,flows,iter_options):
+def update_small_matrix(G, diag_to_update, flows, iter_options):
+    """Update matrix for bifurcation pressure losses.
+
+    Updates the diagonal entries of the system matrix to account for pressure 
+    losses at vessel bifurcations. Handles both diverging (1-to-many) and 
+    converging (many-to-1) bifurcations.
+
+    Parameters
+    ----------
+    G : networkx.DiGraph
+        Graph containing network topology and vessel properties 
+    diag_to_update : numpy.ndarray
+        Diagonal entries of the matrix to update with loss terms
+    flows : dict
+        Edge flows from previous iteration
+    iter_options : dict
+        Dictionary containing options for iteration:
+        - branch_nodes: Mapping of branch node indices to (entering_nodes, leaving_nodes)
+        - inlet_bc: Boundary condition type ("Flow" or "Pressure")
+        - max_inlet_bc_flow: Maximum inlet flow value for flow BCs
+
+    Returns
+    -------
+    numpy.ndarray
+        Updated diagonal entries including bifurcation losses
+
+    Notes
+    -----
+    Implements the Mynard bifurcation pressure loss model with Reynolds number
+    scaling for low Re flows. The loss coefficient depends on:
+    - Flow ratio between parent and daughter vessels
+    - Area ratio between vessels
+    - Bifurcation angles
+    - Reynolds number based viscous effects
+    """
+    # Start timing for performance tracking
+    t = time.time()
     # depending on diverging/converging use associated edges to compute pressure drop coefficients for the current bifurcation/edge combo.
     # could look at only computing some of these once for efficiency, but i think since the flows need to be recalculated and updated anyway not worth
-    t = time.time()
+    t = time.time()  # Start timing for performance tracking
+    
     if iter_options["branch_nodes"]:
-        viscous_re_threshold = 100 # scale when Re < 100 -> otherwise the Mynard approx is not rly valid for low Re
-        absolute_re_threshold = 300 # reynolds number should be at most 300 (based on umbilical artery/vein)
-        rho = 1060 # blood density
-        mu = 3.36e-3 # visc
+        # Thresholds for Reynolds number scaling
+        viscous_re_threshold = 100   # Below this, scale losses by Re/threshold
+        absolute_re_threshold = 300   # Max allowed Re (umbilical vessels limit)
+        
+        # Blood properties
+        rho = 1060      # Density (kg/m^3)
+        mu = 3.36e-3    # Dynamic viscosity (Pa.s)
         branching_dict = iter_options["branch_nodes"]
+        if iter_options["inlet_bc"] == "Pressure":
+            flow_inlet = np.inf
+        else:
+            flow_inlet = iter_options["max_inlet_bc_flow"]
         for row in branching_dict.keys():
             # get required info
             entering_nodes,leaving_nodes,original_row = branching_dict[row]
             if len(leaving_nodes) > 1:
                 datum_flow,datum_area = flows[G[entering_nodes[0]][original_row]["edge_id"]],np.pi*G[entering_nodes[0]][original_row]["radius"]**2
-                max_flow = absolute_re_threshold*datum_area*mu/(rho*2*np.pi*G[entering_nodes[0]][original_row]["radius"])
+                max_flow = min(absolute_re_threshold*datum_area*mu/(rho*2*np.pi*G[entering_nodes[0]][original_row]["radius"]),flow_inlet)
                 datum_flow = np.clip(datum_flow,1e-14,max_flow)
                 for j in leaving_nodes:
                     flow_j,area_j = flows[G[original_row][j]["edge_id"]],np.pi*G[original_row][j]["radius"]**2
-                    max_flow = absolute_re_threshold*area_j*mu/(rho*2*np.pi*G[original_row][j]["radius"])
+                    max_flow = min(absolute_re_threshold*area_j*mu/(rho*2*np.pi*G[original_row][j]["radius"]),flow_inlet)
                     flow_j = np.clip(flow_j,1e-14,max_flow)
 
                     coef = 1 - 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[original_row][j]["bifurcation_angle"])))
@@ -107,27 +237,49 @@ def update_small_matrix(G,diag_to_update,flows,iter_options):
                     Re = rho * (flow_j/area_j)* 2 * G[original_row][j]["radius"]/mu
                     if Re < viscous_re_threshold:
                         p_loss*= Re/viscous_re_threshold
-
                     effective_res = p_loss/flow_j
+                    if effective_res > 1/diag_to_update[G[original_row][j]["edge_id"]]:
+                        # print(f"Predicted unphysical pressure loss in for leaving edge {G[original_row][j]["edge_id"]}, loss has been constrained to increase resistance by 20%")
+                        effective_res = 0.2/diag_to_update[G[original_row][j]["edge_id"]] # this is only really a contingency for flow boundary conditions where 
                     diag_to_update[G[original_row][j]["edge_id"]] = 1/(1/diag_to_update[G[original_row][j]["edge_id"]] + effective_res)
 
             elif len(entering_nodes) > 1:
                 datum_flow,datum_area = flows[G[original_row][leaving_nodes[0]]["edge_id"]],np.pi*G[original_row][leaving_nodes[0]]["radius"]**2
-                max_flow = absolute_re_threshold*datum_area*mu/(rho*2*np.pi*G[entering_nodes[0]][original_row]["radius"])
+                max_flow = min(absolute_re_threshold*datum_area*mu/(rho*2*np.pi*G[entering_nodes[0]][original_row]["radius"]),flow_inlet)
                 datum_flow = np.clip(datum_flow,1e-14,max_flow)
+                # Initialize total pressure loss for converging bifurcation
                 p_loss = 0
                 for j in entering_nodes:
-                    flow_j,area_j = flows[G[j][original_row]["edge_id"]],np.pi*G[j][original_row]["radius"]**2
-                    max_flow = absolute_re_threshold*area_j*mu/(rho*2*np.pi*G[j][original_row]["radius"])
-                    flow_j = np.clip(flow_j,1e-14,max_flow)
+                    # Get flow and cross-sectional area for entering vessel
+                    flow_j = flows[G[j][original_row]["edge_id"]]
+                    area_j = np.pi*G[j][original_row]["radius"]**2
+                    
+                    # Limit flow to prevent unphysical Reynolds numbers
+                    max_flow = min(absolute_re_threshold*area_j*mu/(rho*2*np.pi*G[j][original_row]["radius"]), flow_inlet)
+                    flow_j = np.clip(flow_j, 1e-14, max_flow)
+                    
+                    # Compute loss coefficient based on Mynard model
                     coef = 1 - 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[j][original_row]["bifurcation_angle"])))
+                    
+                    # Add contribution to total pressure loss
                     p_loss += coef*rho*(flow_j/area_j)**2 + 1/2*rho*((datum_flow/datum_area)**2 - (flow_j/area_j)**2)
+                    
+                    # Scale losses by Reynolds number if viscous forces dominate
                     Re = rho * (flow_j/area_j)* 2* G[j][original_row]["radius"]/mu
                     if Re < viscous_re_threshold:
-                        p_loss*= Re/viscous_re_threshold
+                        p_loss *= Re/viscous_re_threshold  # Linear scaling with Re
+                # Convert total pressure loss to effective resistance
                 effective_res = p_loss/datum_flow
+                
+                # Prevent unphysical resistance increases
+                if effective_res > 1/diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]]:
+                    # print(f"Predicted unphysical pressure loss for leaving edge {G[original_row][leaving_nodes[0]]["edge_id"]}, loss has been constrained to increase resistance by 20%")
+                    effective_res = 0.2/diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]]
+                
+                # Update resistance 
                 diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]] = 1/(1/diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]] + effective_res)
-
+    
+    # Report timing statistics
     print(f"matrix update: {time.time() - t}")
     return diag_to_update
 
@@ -135,49 +287,159 @@ def update_small_matrix(G,diag_to_update,flows,iter_options):
 
 
 def solve_system(A, b, num_nodes, num_edges):
+    """Solve full system of equations for pressures and flows.
+    
+    Solves the full system obtained from create_matrices() that includes 
+    both pressure and flow equations. The solution vector contains both
+    nodal pressures and edge flows.
+
+    Parameters
+    ----------
+    A : scipy.sparse.csr_matrix
+        Full system matrix with pressure and flow equations
+    b : numpy.ndarray
+        Right-hand side vector
+    num_nodes : int
+        Number of nodes in network
+    num_edges : int
+        Number of edges in network
+
+    Returns
+    -------
+    dict
+        Mapping of node indices to pressures
+    dict
+        Mapping of edge indices to flows
+
+    Notes
+    -----
+    The solution vector x contains:
+    - First num_nodes entries: nodal pressures
+    - Last num_edges entries: edge flows
+    """
+    # Direct solve of full system using sparse solver
     x = sps.linalg.spsolve(A, b)
+    
+    # Extract pressures from first section of solution vector
     pressures = {node_id: x[node_id] for node_id in range(num_nodes)}
+    
+    # Extract flows from second section, offset by number of nodes
     flows = {edge_id: x[num_nodes + edge_id] for edge_id in range(num_edges)}
-    # TODO: Check this works
+    
     return pressures, flows
 
-def iterative_solve_small(A,b,G,bc_export,tol,info,alpha=1,maxiter=20,use_gmres=False,adaptive_stepping=True):
+def iterative_solve_small(A, b, G, bc_export, tol, info, alpha=1, maxiter=20, use_gmres=False, adaptive_stepping=True):
+    """Iteratively solve system with bifurcation pressure losses.
+
+    Solves the system iteratively to handle nonlinear bifurcation pressure
+    losses. Uses either direct solution or GMRES with optional adaptive stepping
+    for better convergence.
+
+    Parameters
+    ----------
+    A : scipy.sparse.csr_matrix  
+        Initial system matrix
+    b : numpy.ndarray
+        Right-hand side vector
+    G : networkx.DiGraph
+        Graph containing network topology
+    bc_export : tuple
+        (bc_type, boundary_indices, boundary_vals, inlet_idx)
+    tol : float
+        Convergence tolerance on pressure MSE
+    info : dict
+        Options dictionary containing:
+        - branching_update_matrix: Initial resistance matrix
+        - branching_calc_matrices: Pre-computed matrices for efficiency
+        - inlet_bc: Boundary condition type 
+        - max_inlet_bc_flow: Max inlet flow for flow BCs
+    alpha : float, optional
+        Initial relaxation factor
+    maxiter : int, optional  
+        Maximum iterations
+    use_gmres : bool, optional
+        Whether to use GMRES solver
+    adaptive_stepping : bool, optional
+        Whether to adapt alpha based on convergence
+        
+    Returns
+    -------
+    dict
+        Node pressures
+    dict
+        Edge flows
+
+    Notes
+    -----
+    Uses a relaxed fixed-point iteration:
+    1. Solve system with current resistances
+    2. Update bifurcation loss terms
+    3. Relaxed update of solution
+    4. Check convergence
+    """
+    # Start timing
     s = time.time()
+    
+    # Get initial resistance matrix
     W = info["branching_update_matrix"]
+    
+    # Initial solve using appropriate method
     if use_gmres:
-        p,q,internal_p = solve_small_system(A,b,G,bc_export,ill_conditioned=True)
+        p, q, internal_p = solve_small_system(A, b, G, bc_export, ill_conditioned=True)
     else:
-        p,q = solve_small_system(A,b,G,bc_export,ill_conditioned=False)
+        p, q = solve_small_system(A, b, G, bc_export, ill_conditioned=False)
+    
+    # Convert dictionary results to arrays for computation
     p0 = np.array([p[node] for node in p.keys()])
     q0 = np.array([q[elem] for elem in q.keys()])
+    
+    # Print initial solution statistics
     print(f"Info |  Max Pressure: {np.max(p0)} | Min Pressure: {np.min(p0)} | Max flow: {np.max(q0)} | Min flow: {np.min(q0)}")
 
-    p_mse = np.inf
-    old_mse = np.inf
+    # Initialize convergence tracking
+    p_mse = np.inf  # Mean squared error in pressures
+    old_mse = np.inf  # Previous iteration MSE
     iteration = 1
+    
     print("Warm up period...")
-    min_alpha = min(5*tol,1)
-    max_alpha = 1
-    flag = int(use_gmres)
-    init_alpha = alpha
+    # Set relaxation factor bounds
+    min_alpha = min(5*tol, 1)  # Lower bound proportional to tolerance
+    max_alpha = 1              # Upper bound at full update
+    flag = int(use_gmres)     # Track GMRES convergence
+    init_alpha = alpha        # Store initial alpha for adaptive stepping
+    
+    # Extract pre-computed matrices based on problem type
     if len(info["branching_calc_matrices"]) == 1:
+        # Simple case - just need reduced incidence matrix
         Br = info["branching_calc_matrices"][0]
     else:
-        [Br,u_ainv_c] = info["branching_calc_matrices"]
+        # Full flow BC case - need additional matrices
+        [Br, u, c, qi, vp_out, edge_idx] = info["branching_calc_matrices"]
+    
+    # Main iteration loop
     while p_mse > tol or flag:
+        # Check iteration limit
         if iteration > maxiter:
             print("Maximum Iteration Count Reached. Consider constraining the learning rate parameter alpha (if observing cycling) or GMRES if MSE is very large")
             break
-        diag_update = update_small_matrix(G,W.diagonal(),q,info)
-        W_new = sps.diags(diag_update,offsets=0).tocsc()
+            
+        # Update resistances based on current flows
+        diag_update = update_small_matrix(G, W.diagonal(), q, info)
+        W_new = sps.diags(diag_update, offsets=0).tocsc()
+        
+        # Reconstruct system matrix based on problem type
         if len(info["branching_calc_matrices"]) == 1:
-            A_new = Br @ W_new @ Br.T
+            # pressure BC
+            A = Br @ W_new @ Br.T
         else:
-            A_new = Br @ W_new @ Br.T - u_ainv_c
+            # Flow BC
+            a_inv = sps.diags(diag_update[edge_idx]).tocsc()
+            A = Br @ W_new @ Br.T - u @ a_inv @ c
+            b = -u @ a_inv @ qi - vp_out
         if use_gmres:
-            p,q,internal_p,flag = __solve_with_gmres(A_new,b,G,bc_export,current_p=internal_p)
+            p,q,internal_p,flag = __solve_with_gmres(A,b,G,bc_export,current_p=internal_p)
         else:
-            p,q = solve_small_system(A_new,b,G,bc_export,ill_conditioned=False)
+            p,q = solve_small_system(A,b,G,bc_export,ill_conditioned=False)
         p_init = np.array([p[node] for node in p.keys()])
         p_mse = 1/len(p_init)*np.linalg.norm(p_init - p0)**2
 
@@ -210,8 +472,62 @@ def iterative_solve_small(A,b,G,bc_export,tol,info,alpha=1,maxiter=20,use_gmres=
     return p,q
 
 
-def solve_iterative_system(G, A, b, num_nodes, num_edges, bcs, viscosity_model, mu, capillary_model, capillary_parameters, tol=0.01, max_solve_time=120): # max solve time in seconds
-    #TODO: Make solve iterative small system work as well
+def solve_iterative_system(G, A, b, num_nodes, num_edges, bcs, viscosity_model, mu, capillary_model, capillary_parameters, tol=0.01, max_solve_time=120):
+    """Solve full system iteratively with nonlinear effects.
+    
+    Iteratively solves the full system accounting for vessel elasticity, 
+    non-linear blood rheology, and geometry updates. Uses direct solution
+    with resistance updates until convergence.
+
+    Parameters
+    ----------
+    G : networkx.DiGraph
+        Graph containing network topology
+    A : scipy.sparse.csr_matrix
+        Initial system matrix
+    b : numpy.ndarray 
+        Right-hand side vector
+    num_nodes : int
+        Number of nodes in network
+    num_edges : int
+        Number of edges in network
+    bcs : dict
+        Boundary conditions dictionary
+    viscosity_model : str
+        Type of viscosity model to use
+    mu : float
+        Base blood viscosity
+    capillary_model : str
+        Type of capillary model
+    capillary_parameters : dict
+        Parameters for capillary model
+    tol : float, optional
+        Convergence tolerance, default 0.01
+    max_solve_time : float, optional
+        Maximum solve time in seconds, default 120s
+
+    Returns
+    -------
+    dict
+        Node pressures
+    dict
+        Edge flows
+
+    Notes
+    -----
+    Algorithm:
+    1. Solve system directly
+    2. Update geometry and properties
+    3. Update resistances
+    4. Check convergence
+    5. Repeat until converged or timeout
+
+    Current limitations:
+    - Does not handle branching angles
+    - Basic viscosity models only
+    - No coupled wall mechanics
+    """
+    # TODO: Make solve iterative small system work as well
     # Solve matrix directly, update resistances, check convergence.
     # Used for elasticity, non-linear (flow-dependent) blood rheology, and branching-angle effect.
     import copy
@@ -265,8 +581,45 @@ def solve_iterative_system(G, A, b, num_nodes, num_edges, bcs, viscosity_model, 
 
     return pressures, flows
 
-def update_A_matrix(A, pressures, flows, G,n,m, flow_dependent_viscosity=False, branching_angles=False, elastic_vessels=False,):
-    #TODO: Write this function
+def update_A_matrix(A, pressures, flows, G, n, m, flow_dependent_viscosity=False, branching_angles=False, elastic_vessels=False):
+    """Update system matrix with nonlinear effects.
+    
+    DEPRECATED: This function is incomplete and not recommended for use.
+    Use the small matrix formulation instead for branching angles and 
+    other nonlinear effects.
+
+    Parameters
+    ----------
+    A : scipy.sparse.csr_matrix
+        System matrix to update
+    pressures : dict
+        Node pressures 
+    flows : dict
+        Edge flows
+    G : networkx.DiGraph
+        Network graph
+    n : int
+        Number of nodes
+    m : int
+        Number of edges
+    flow_dependent_viscosity : bool, optional
+        Whether to include flow-dependent viscosity
+    branching_angles : bool, optional
+        Whether to include branching angle effects
+    elastic_vessels : bool, optional
+        Whether to include vessel elasticity effects
+
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        Updated system matrix
+
+    Warnings
+    --------
+    This function is deprecated and incomplete. Use small matrix 
+    formulation in create_small_matrices() instead.
+    """
+    # TODO: Write this function
     if branching_angles:
         raise Warning("Dont use this for branching angles! Use the small matrix system!")
         rho = 1060 # kg/m^3
@@ -297,6 +650,49 @@ def update_A_matrix(A, pressures, flows, G,n,m, flow_dependent_viscosity=False, 
     return A
 
 def update_graph(G, viscosity_model, mu, capillary_model, capillary_parameters, flow_dependent_viscosity=False):
+    """Update graph with hematocrit and viscosity changes.
+    
+    Updates vessel properties based on the Pries et al. (1990) plasma 
+    skimming model and recalculates resistances. Handles hematocrit 
+    distribution at bifurcations and corresponding viscosity changes.
+
+    Parameters
+    ----------
+    G : networkx.DiGraph
+        Graph containing network topology and vessel properties
+    viscosity_model : str
+        Type of viscosity model to use
+    mu : float
+        Base blood viscosity
+    capillary_model : str
+        Type of capillary model to use
+    capillary_parameters : dict
+        Parameters for capillary model
+    flow_dependent_viscosity : bool, optional
+        Whether to use flow-dependent viscosity
+
+    Returns
+    -------
+    networkx.DiGraph
+        Updated graph with new hematocrit and resistance values
+
+    Notes
+    -----
+    Algorithm:
+    1. Calculate fractional RBC flow (FQE) for each daughter vessel
+    2. Update daughter hematocrit based on parent values
+    3. Recalculate viscosity factors
+    4. Update vessel resistances
+
+    Based on:
+    Pries et al. (1990) - Blood viscosity in tube flow: dependence on 
+    diameter and hematocrit. Am J Physiol.
+
+    Limitations:
+    - Multiple parent vessels not supported
+    - Uses mean diameter for >2 daughter vessels
+    - Assumes constant plasma viscosity
+    """
     # Steps:
     # Define X0, A, B.
     # Work out the FQE. fraction of red blood cells in daughter cell.
@@ -376,5 +772,4 @@ def update_graph(G, viscosity_model, mu, capillary_model, capillary_parameters, 
     return G
 
 
-def iterative_solve(A,b,G,bc_export,c0=0):
-    p,q = solve_small_system(A,b,G,bc_export)
+
