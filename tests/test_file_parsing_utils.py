@@ -1,5 +1,5 @@
 import pytest
-from FetoFlow.file_parsing_utils import read_nodes, read_elements, define_fields_from_files
+from fetoflow.file_parsing_utils import read_nodes, read_elements, define_fields_from_files
 
 
 def test_read_nodes_invalid_type():
