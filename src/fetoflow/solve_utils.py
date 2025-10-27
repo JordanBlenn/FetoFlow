@@ -19,7 +19,7 @@ def solve_small_system(A, b, G,boundary_conditions,ill_conditioned=False,p0=None
         for current_inlet in inlet_idx:
             adj_to_inlet = list(G.out_edges(current_inlet))[0][1]
             value_idx = np.where(boundary_indices == current_inlet)[0][0]
-            p0 = boundary_vals[value_idx]*G[current_inlet][adj_to_inlet]["resistance"] + p[current_inlet]
+            p0 = boundary_vals[value_idx]*G[current_inlet][adj_to_inlet]["resistance"] + p[adj_to_inlet - np.sum(adj_to_inlet < inlet_idx)]
             boundary_vals_current_iteration[value_idx] = p0
     else:
         boundary_vals_current_iteration = boundary_vals
@@ -29,6 +29,9 @@ def solve_small_system(A, b, G,boundary_conditions,ill_conditioned=False,p0=None
     for u,v in G.edges():
         pu,pv = p[u],p[v]
         q[G[u][v]['edge_id']] = (pu-pv)/G[u][v]['resistance']
+        if u in inlet_idx:
+            print (v,pu,pv,G[u][v]['resistance'])
+            print(q[G[u][v]['edge_id']])
     num_nodes = G.number_of_nodes()
     num_edges = G.number_of_edges()
     pressures = {node_id: p[node_id] for node_id in range(num_nodes)}
@@ -86,7 +89,7 @@ def update_small_matrix(G,diag_to_update,flows,iter_options):
         viscous_re_threshold = 100 # scale when Re < 100 -> otherwise the Mynard approx is not rly valid for low Re
         absolute_re_threshold = 300 # reynolds number should be at most 300 (based on umbilical artery/vein)
         rho = 1060 # blood density
-        mu = 4e-3 # visc
+        mu = 3.36e-3 # visc
         branching_dict = iter_options["branch_nodes"]
         for row in branching_dict.keys():
             # get required info
@@ -103,7 +106,7 @@ def update_small_matrix(G,diag_to_update,flows,iter_options):
                     coef = 1 - 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[original_row][j]["bifurcation_angle"])))
                     p_loss = coef*rho*(flow_j/area_j)**2 + 1/2*rho*((datum_flow/datum_area)**2 - (flow_j/area_j)**2) # full pressure loss as per Mynard
 
-                    Re = rho * (flow_j/area_j)* 2* G[original_row][j]["radius"]/mu
+                    Re = rho * (flow_j/area_j)* 2 * G[original_row][j]["radius"]/mu
                     if Re < viscous_re_threshold:
                         p_loss*= Re/viscous_re_threshold
 
@@ -121,8 +124,9 @@ def update_small_matrix(G,diag_to_update,flows,iter_options):
                     flow_j = np.clip(flow_j,1e-14,max_flow)
                     coef = 1 - 1/((flow_j/datum_flow)*(datum_area/area_j))*np.cos((3/4*np.pi - 3/4*(np.pi - G[j][original_row]["bifurcation_angle"])))
                     p_loss += coef*rho*(flow_j/area_j)**2 + 1/2*rho*((datum_flow/datum_area)**2 - (flow_j/area_j)**2)
-                if Re < viscous_re_threshold:
-                    p_loss*= Re/viscous_re_threshold
+                    Re = rho * (flow_j/area_j)* 2* G[j][original_row]["radius"]/mu
+                    if Re < viscous_re_threshold:
+                        p_loss*= Re/viscous_re_threshold
                 effective_res = p_loss/datum_flow
                 diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]] = 1/(1/diag_to_update[G[original_row][leaving_nodes[0]]["edge_id"]] + effective_res)
 
@@ -266,6 +270,7 @@ def solve_iterative_system(G, A, b, num_nodes, num_edges, bcs, viscosity_model, 
 def update_A_matrix(A, pressures, flows, G,n,m, flow_dependent_viscosity=False, branching_angles=False, elastic_vessels=False,):
     #TODO: Write this function
     if branching_angles:
+        raise Warning("Dont use this for branching angles! Use the small matrix system!")
         rho = 1060 # kg/m^3
         for row in range(m):
             flow_cons_row = A[row,m:m+n]

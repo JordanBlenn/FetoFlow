@@ -149,30 +149,40 @@ def create_small_matrices(G, bcs,branching_angles=False,non_linear_rheology=Fals
         W = sp.diags(vals,offsets=0).tocsc()
         WBt = W @ B.transpose() # precompute for efficiency
 
-        ## TODO lot of this done in bc_utils. Will clean up once implementation complete.
         boundary_vals = []
         outlet_idx = []
         inlet_idx = []
+        error = False
         for node in boundary_indices:
             if np.sum(B[node,:]) == -1:
-                boundary_vals.append(bcs["inlet"]["pressure"] if is_inlet_pressure else bcs["inlet"]["flow"])
+                if is_inlet_pressure:
+                    boundary_vals.append(bcs["inlet"]["pressure"])
+                else:
+                    if isinstance(bcs["inlet"]["flow"],dict):
+                        val =  bcs["inlet"]["flow"].get(node)
+                        if val:
+                            boundary_vals.append(val)
+                        else:
+                            error=True
+                    else:
+                        boundary_vals.append(bcs["inlet"]["flow"])
                 inlet_idx.append(node)
             else:
                 outlet_idx.append(node)
                 boundary_vals.append(bcs["outlet"]["pressure"])
+        if error:
+            raise ValueError(f"The values specified for the flow boundary inlets are not valid. The value should be the 'entering node' (the node you would use for a pressure outlet)\n The valid nodes are: {np.array(inlet_idx)+1}")
 
         if is_inlet_flow:
             edge_idx = []
             if isinstance(bcs["inlet"]["flow"],dict):
-                edge_idx = bcs["inlet"]["flow"].keys()
-                flow_in = bcs["inlet"]["flow"].values()
+                flow_in = list(bcs["inlet"]["flow"].values())
             else:
                 flow_in = [bcs["inlet"]["flow"]]*(len(boundary_vals) - len(outlet_idx))
-                for node in boundary_indices:
-                    if np.sum(B[node,:]) == -1:
-                        data = B[node,:].indices[0]
-                        edge_idx.append(data)
-            vals = W.diagonal()
+            for node in boundary_indices:
+                if np.sum(B[node,:]) == -1:
+                    data = B[node,:].indices[0]
+                    edge_idx.append(data)
             a_inv_vals = 1 / vals[edge_idx]
             a_inv = sp.diags(a_inv_vals)
             Br = B[rest, :]
@@ -182,7 +192,6 @@ def create_small_matrices(G, bcs,branching_angles=False,non_linear_rheology=Fals
             c = B[inlet_idx, :] @  WBt[:,rest]
 
             u_ainv_c = u @ a_inv @ c
-                
             qi = sp.csc_array(np.array(flow_in).reshape(-1, 1))
             p_out = sp.csc_array(np.array([bcs["outlet"]["pressure"]] * len(outlet_idx)).reshape(-1, 1))
             A = M - u_ainv_c

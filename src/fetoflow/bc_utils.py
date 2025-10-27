@@ -56,6 +56,8 @@ def generate_boundary_conditions(inlet_pressure=None, inlet_flow=None, outlet_pr
                 f"Inlet flow type '{type(inlet_flow)}' is not valid. Valid types include float or int for single inputs and dict for multiple inputs."
             )
         elif isinstance(inlet_flow, int) or isinstance(inlet_flow, float):
+            if inlet_flow > 1:
+                raise Warning("Flow seems large - make sure you have converted to m^3/s")
             if not inlet_flow > 0:
                 raise ValueError(f"Invalid inlet flow of '{inlet_flow}' Pa. Must be greater than 0.")
             bcs["inlet"] = {"flow": inlet_flow}
