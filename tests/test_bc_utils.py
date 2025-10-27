@@ -1,6 +1,6 @@
 import pytest
 
-from FetoFlow.bc_utils import generate_boundary_conditions
+from fetoflow.bc_utils import generate_boundary_conditions
 
 
 def test_inlet_and_outlet_pressure_single_values():
