@@ -4,9 +4,9 @@ import pandas as pd
 def main():
 
     # read in node and element files
-    node_filename= 'sample_geometry/P49_full_tree.ipnode'
-    element_filename = 'sample_geometry/P49_full_tree.ipelem'
-    radius_filename = 'sample_geometry/P49_full_tree_radius.ipfiel'
+    node_filename= 'sample_geometry/full_tree.ipnode'
+    element_filename = 'sample_geometry/full_tree.ipelem'
+    radius_filename = 'sample_geometry/chorionic_element_radii_cycle3_v5_two_inlets.ipfiel'
 
     # process nodes and elements using functions from file_parsing_utils()
     nodes = read_nodes(node_filename)
@@ -17,6 +17,7 @@ def main():
     inlet_pressure, outlet_pressure = 6650, 2660
 
     # generate boundaray conditions dictionary 
+    print("Creating Boundary Conditions")
     bcs = generate_boundary_conditions(inlet_pressure = inlet_pressure, outlet_pressure = outlet_pressure, inlet_flow=None)
 
     # define other required geometric features (radii and decay factors)
@@ -27,10 +28,9 @@ def main():
     viscosity_type = 'constant' # can also be 'pries_network' or 'pries_vessel' if wanting to incorporate radius-dependence
 
     # Generate the di-graph & calculate the resistances based on the viscosity
+    print("Creating Geometry")
     G = create_geometry(nodes, elements, umbilical_artery_radius, decay_factor, arteries_only, umbilical_vein_radius, decay_factor_vein,fields=fields)
-    radii_out = getRadii(G)
-    radii_export = pd.DataFrame([{"Node In" : node_in, "Node Out" : node_out, "Radius" : r} for (node_in,node_out),r in radii_out.items()])
-    radii_export.to_csv("output_data/radius_from_file.csv")
+    print("Calculating Resistance")
     G = calculate_resistance(G, viscosity_model=viscosity_type)
 
     # if wanting to incorporate bifurcation pressures losses
@@ -49,8 +49,10 @@ def main():
         p,q = iterative_solve_small(A,b,G,bc_export,convergence_tol,iterative_info,use_gmres=False,adaptive_stepping=True)
     else:
         # solve directly
-         A,b,bc_export = create_small_matrices(G,bcs,branching_angles=False)
-         p,q = solve_small_system(A,b,G,bc_export)
+        print("Calculating Matrices")
+        A,b,bc_export = create_small_matrices(G,bcs,branching_angles=False)
+        print("Solving for Pressures and Flows")
+        p,q = solve_small_system(A,b,G,bc_export)
 
     # store pressure and flows
     pressures = pd.DataFrame([{"Node" : node, "Pressure" : pressure} for node,pressure in p.items()])

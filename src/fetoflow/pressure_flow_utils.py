@@ -321,11 +321,7 @@ def pressures_and_flows(
     edge_data_df.to_csv(output_directory + os.sep + 'edge_data.csv',index=False)
     # Create A and b matrices:
     if use_laplacian:
-            
-        ## really dont want to do the svd for a big matrix - it will literally take longer than converging the matrix itself. im trying to find a good way
-        ## to approximate it for my gmres switching.
-
-        A, b, bc_export, _ = create_small_matrices(G=G, bcs=bcs)
+        A, b, bc_export = create_small_matrices(G=G, bcs=bcs)
     else:
         A, b = create_matrices(G=G, n=G.number_of_nodes(), m=G.number_of_edges(), bcs=bcs)
         
@@ -339,7 +335,7 @@ def pressures_and_flows(
         if nonlinear:
             pressures, flows = iterative_solve_small(A=A, b=b, G=G, boundary_conditions=bc_export)
         else:
-            pressures, flows, _ = solve_small_system(A=A, b=b, G=G, boundary_conditions=bc_export)
+            pressures, flows = solve_small_system(A=A, b=b, G=G, boundary_conditions=bc_export)
 
 
     # Export to output directories. TODO: All the other stuff we want to export. Will be more done in the solver function.

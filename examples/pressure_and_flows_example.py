@@ -2,17 +2,13 @@ from FetoFlow.pressure_flow_utils import pressures_and_flows
 import pandas as pd
 def main():
 
-    node_filename = "FullTree.ipnode"
-    element_filename = "FullTree.ipelem"
+    node_filename = "sample_geometry/FullTree.ipnode"
+    element_filename = "sample_geometry/FullTree.ipelem"
     boundary_conditions = {
-        "inlet" : {
-            "pressure" : 6650
-        },
-        "outlet" : {
-            "pressure" : 2660
-        }
+        "inlet_pressure" : 6650,
+        "outlet_pressure" : 2660
     }
-    inlet_radius = 1.8*10**-3
+    inlet_radius = 1.8/1000
     strahler_ratio_arteries = 1.38
     
     # call pressure and flows function
@@ -25,12 +21,12 @@ def main():
         input_directory=".",
         output_directory="./output_data",
         flow_output_filename="flow_values.csv",
-        pressure_output_filename="flow_values.csv",
+        pressure_output_filename="pressure_values.csv",
         arteries_only=False,
         viscosity_model="constant",
         vessel_type="rigid",
-        outlet_vein_radius=None,
-        strahler_ratio_veins=None,
+        outlet_vein_radius=4.0,
+        strahler_ratio_veins=1.46,
         anastomosis=None,
         mu=0.33600e-2,  # This is the non-capillary viscosity value used
         capillary_model="analytical2015",
