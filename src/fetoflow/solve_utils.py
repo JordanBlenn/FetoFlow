@@ -19,8 +19,9 @@ def solve_small_system(A, b, G,boundary_conditions,ill_conditioned=False,p0=None
         for current_inlet in inlet_idx:
             adj_to_inlet = list(G.out_edges(current_inlet))[0][1]
             value_idx = np.where(boundary_indices == current_inlet)[0][0]
-            p0 = boundary_vals[value_idx]*G[current_inlet][adj_to_inlet]["resistance"] + p[adj_to_inlet - np.sum(adj_to_inlet < inlet_idx)]
-            boundary_vals_current_iteration[value_idx] = p0
+            index_adjustment = np.sum([adj_to_inlet > i for i in inlet_idx])
+            p0 = boundary_vals[value_idx]*G[current_inlet][adj_to_inlet]["resistance"] + p[adj_to_inlet - index_adjustment]
+            boundary_vals_current_iteration[value_idx] = p0 
     else:
         boundary_vals_current_iteration = boundary_vals
     indices = np.argsort(boundary_indices)
@@ -29,9 +30,6 @@ def solve_small_system(A, b, G,boundary_conditions,ill_conditioned=False,p0=None
     for u,v in G.edges():
         pu,pv = p[u],p[v]
         q[G[u][v]['edge_id']] = (pu-pv)/G[u][v]['resistance']
-        if u in inlet_idx:
-            print (v,pu,pv,G[u][v]['resistance'])
-            print(q[G[u][v]['edge_id']])
     num_nodes = G.number_of_nodes()
     num_edges = G.number_of_edges()
     pressures = {node_id: p[node_id] for node_id in range(num_nodes)}
