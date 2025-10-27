@@ -30,9 +30,9 @@ def main():
         anastomosis=None,
         mu=0.33600e-2,  # This is the non-capillary viscosity value used
         capillary_model="analytical2015",
-        capillary_parameters=None,  # TODO: Ensure proper dict formatting here.
+        capillary_parameters=None, 
         radius_filename=None,
-        other_field_filenames=None,  # TODO: these are implementable. and radius. Dictionary if used
+        other_field_filenames=None,  
         verbose=False,
         time_statistics=False,
         return_graph=False,
