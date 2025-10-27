@@ -21,6 +21,7 @@ from .helper_functions import (
     getNumVessels,
     getRadius,
     getVesselLength,
+    export_as_numpy
 )
 from .pressure_flow_utils import (
     pressures_and_flows,

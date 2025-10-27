@@ -1,6 +1,5 @@
 import networkx as nx
-
-
+import numpy as np
 def getRadii(G: nx.digraph):
     """
     Returns all radii of all vessels in the Arterial tree as a dictionary:
@@ -57,5 +56,21 @@ def getNumVessels(G):
     return count
 
 
-def branching_analytics():
-    pass
+def export_as_numpy(G,output_form="reduced"):
+    """
+    Converts a complete digraph to numpy
+    """
+    print("This function is under development!")
+    return 
+    if output_form == "full":
+        node_export = np.ndarray(shape=(G.number_of_nodes(),4))
+        for node,node_data in G.nodes(data=True):
+            x,y,z = node_data["x"],node_data["y"],node_data["z"]
+            node_export[node,:] = node,x,y,z
+        print(node_export)
+    ## We need to convert each field stored in the digraph to a numpy array
+    elif output_form == "reduced":
+        pass
+    else:
+        print("Use full or reduced")
+

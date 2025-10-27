@@ -1,3 +1,4 @@
+import warnings
 def read_nodes(filename):
     if not isinstance(filename,str):
         raise(TypeError("File name should be a string!"))
@@ -61,6 +62,7 @@ def define_fields_from_files(files: dict[str]):
             else:
                 raise(TypeError(f"This function expects a .ipfiel file. No file extension found."))
         with open(file_name, "r") as f:
+            warnings.warn(f"Assuming the radii in {file_name} are in mm!!!")
             i = 7  # ignore metadata
             lines = f.readlines()
             max_digits = len(lines[3][lines[3].find(":") + 1 :].strip())
