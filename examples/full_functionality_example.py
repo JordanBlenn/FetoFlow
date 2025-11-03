@@ -1,17 +1,17 @@
-from FetoFlow import *
+from fetoflow import *
 import pandas as pd
 
 def main():
 
     # read in node and element files
-    node_filename= 'sample_geometry/full_tree.ipnode'
-    element_filename = 'sample_geometry/full_tree.ipelem'
-    radius_filename = 'sample_geometry/chorionic_element_radii_cycle3_v5_two_inlets.ipfiel'
+    node_filename = "sample_geometry/FullTree.ipnode"
+    element_filename = "sample_geometry/FullTree.ipelem"
+    # radius_filename = 'sample_geometry/chorionic_element_radii_cycle3_v5_two_inlets.ipfiel'
 
     # process nodes and elements using functions from file_parsing_utils()
     nodes = read_nodes(node_filename)
     elements = read_elements(element_filename)
-    fields = define_fields_from_files(files={"radius":radius_filename})
+    # fields = define_fields_from_files(files={"radius":radius_filename})
 
     # define boundary conditions
     inlet_pressure, outlet_pressure = 6650, 2660
@@ -29,7 +29,7 @@ def main():
 
     # Generate the di-graph & calculate the resistances based on the viscosity
     print("Creating Geometry")
-    G = create_geometry(nodes, elements, umbilical_artery_radius, decay_factor, arteries_only, umbilical_vein_radius, decay_factor_vein,fields=fields)
+    G = create_geometry(nodes, elements, umbilical_artery_radius, decay_factor, arteries_only, umbilical_vein_radius, decay_factor_vein)
     print("Calculating Resistance")
     G = calculate_resistance(G, viscosity_model=viscosity_type)
 

@@ -8,15 +8,25 @@ def read_nodes(filename):
         lines = f.readlines()
         nodes = {}
         numVars = int(lines[4].split()[-1])
-        baseStep = numVars + 2
-        i = 4 + 2 * numVars + 2
+        multi_versions = lines[5].split()[-1]
+        if multi_versions == "Y":
+            baseStep = numVars + 2
+            i = 4 + 2 * numVars + 2 # start row for "Y"
+        elif multi_versions == "N":
+            nversions = 0
+            c_step = 1
+            i_step = numVars + 2
+            i = 4 + 2 * numVars + 1 # start row for "N"
+        else:
+            raise TypeError("Double Check File Format")
         while i < len(lines):
             node_id = int(lines[i].split()[-1])
-            nversions = int(lines[i + 1].split()[-1])
-            i_step = baseStep + nversions * numVars + (nversions * numVars if nversions > 1 else 0)
-            c_step = numVars * nversions - 1
+            if multi_versions == "Y":
+                nversions = int(lines[i + 1].split()[-1])
+                c_step = numVars * nversions - 1
+                i_step = baseStep + nversions * numVars + (nversions * numVars if nversions > 1 else 0)
             coords = []
-            for c in range(1 + nversions, i_step, c_step):
+            for c in range(1 + nversions, i_step - 1, c_step):
                 coord = lines[i + c].split()[-1]
                 coords.append(float(coord))
             nodes[node_id - 1] = coords  # 0-based indexing for the networkX geometry.

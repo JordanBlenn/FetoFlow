@@ -1,9 +1,9 @@
-from FetoFlow.pressure_flow_utils import pressures_and_flows
+from fetoflow.pressure_flow_utils import pressures_and_flows
 import pandas as pd
 def main():
 
-    node_filename = "sample_geometry/FullTree.ipnode"
-    element_filename = "sample_geometry/FullTree.ipelem"
+    node_filename = "sample_geometry/3_branchlen_tree.ipnode"
+    element_filename = "sample_geometry/3_branchlen_tree.ipelem"
     boundary_conditions = {
         "inlet_pressure" : 6650,
         "outlet_pressure" : 2660
